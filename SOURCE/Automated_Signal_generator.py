@@ -14,7 +14,7 @@ from datetime import datetime
 
 #%% SIGNAL GENERATOR --> MACD, BOLLINGER BAND, RSI, etc
   
-#Moving average signals
+
 class signalStrategy(object):
     def __init__(self):
         return
@@ -30,7 +30,8 @@ class signalStrategy(object):
         STOK_list_.append(DIR_OBJ[x].strip('.csv'))
         
       return STOK_list_
-  
+
+    #Moving average signals
     def MA_signal(self, STK_data, ema = None, sma = None, period_alpha = None,
                   period_beta = None):
       '''
@@ -94,7 +95,7 @@ class signalStrategy(object):
       print('*'*40)
       return df
       
-    #RSI Signal
+    #MACD Signal
     def macd_crossOver(self, STK_data, fast, slow, signal):
       '''
       :Argument:
@@ -188,7 +189,7 @@ class signalStrategy(object):
         print('*'*40)
         return df
 
-#Trading Algorithm
+#Signal Algorithm
 class Signal(object):
     def __init__(self):
         return
