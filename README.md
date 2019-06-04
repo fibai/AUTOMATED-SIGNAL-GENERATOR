@@ -1,7 +1,7 @@
 # AUTOMATED-SIGNAL-GENERATOR
 AUTOMATED SIGNAL GENERATOR FOR STOCKS/FX-PAIRS
 
-```
+```bash
 +-- DATASSET
 |    +-- AUD_CAD
 |    +-- AUD_USD
@@ -41,7 +41,7 @@ AUTOMATED SIGNAL GENERATOR FOR STOCKS/FX-PAIRS
 
 ## Requirement
 
-```
+```bash
 pandas
 pip install pandas
 numpy
@@ -55,7 +55,7 @@ install anaconda/miniconda
 Ensure that you already have your dataset downloaded. For this project i used the Oanda API to download historical price.
 See [How to Download historical stock/fx prices from oanda](https://github.com/fibai/OANDA-API-WRAPPER/tree/master/HISTORICAL%20PRICES)
 
-```
+```python
 After the above process is completed
 Run STOCK.py
 $ python STOCK.py
