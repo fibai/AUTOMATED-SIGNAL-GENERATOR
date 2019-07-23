@@ -12,6 +12,7 @@ AUTOMATED SIGNAL GENERATOR FOR STOCKS/FX-PAIRS
 |    +-- EUR_USD
 |    +-- GBP_USD
 |    +-- NZD_USD
+|    +-- USDCHF
 +-- PREDICTED
 |    +--H1
      |  +--AUD_CAD
