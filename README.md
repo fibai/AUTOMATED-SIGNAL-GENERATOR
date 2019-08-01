@@ -66,3 +66,7 @@ $ python Automated_Signla_generator.py
 
 This process initiates every 30mins. You can change the timer as desired.
 ```
+
+## Demo GUI
+
+![Image 1](https://github.com/fibai/AUTOMATED-SIGNAL-GENERATOR/blob/master/AI-signal.gif)
