@@ -260,6 +260,30 @@ class stock(object):
   '''
   :Price function:: Utils
   '''
+  def rolling_min(self, df, n):
+      '''
+      :params:
+          df:
+             price dataframe
+          n: period
+      :Return: rolling minimum
+      '''
+      self.df = df
+      self.n = n
+      return self.df.rolling(self.n).min()
+  
+  def rolling_max(self, df, n):
+      '''
+      :params:
+          df:
+             price dataframe
+          n: period
+      :Return: rolling maximum
+      '''
+      self.df = df
+      self.n = n
+      return self.df.rolling(self.n).max()
+    
   def sma(self, df, n):
     '''
     Arguments:
@@ -337,7 +361,7 @@ class stock(object):
     return np.power((df.ix[-1] / df.ix[0]), 1.0 / ((end - start).days / self.DAYS_IN_YEAR)) - 1.0
   
   def quadrant(self):
-    '''
+    '''Docstring
     :Return:
       Quandrants: [0], [1], [2], [3], [4]
     '''
@@ -360,7 +384,27 @@ class stock(object):
                          'middle_quad': middle_line, 'third_quad': third_line, 
                          'High': top_line})
     
-    
+  def stochasticOscillator(self, df, n, sma = None, ema = None):
+    """Docstring
+    :param df: pandas.DataFrame
+    :param n: data window
+    :param sma: data window
+    :param ema: data window
+    :return: pandas.DataFrame
+    """
+    SOk = ((self.Close - self.rolling_min(self.Low, n)) / (self.rolling_max(self.High, n) - self.rolling_min(self.Low, n)))*100
+    if sma and ema:
+        raise ValueError('sma and ema cannot both be true')
+    elif sma:
+        print('Using sma for stochastic')
+        SOk = self.sma(SOk, sma)
+        SOd = np.array(self.sma(SOk, sma))
+    elif ema:
+        print('Using ema for stochastic')
+        SOk = self.ema(SOk, ema)
+        SOd = np.array(self.ema(SOk, ema))
+    return pd.DataFrame({'SOD': SOd, 'SOK': SOk})
+  
   def fibonacci_pivot_point(self):
     '''
     :Returns:
@@ -570,6 +614,40 @@ class stock(object):
     RSI = pd.Series(PosDI / (PosDI + NegDI), name='RSI_Cutler_{}'.format(n))
     return RSI*100
   
+  def RSIFastWilder(self, df, n):
+    """
+    Calculate Relative Strength Index(RSI) for given data computationally
+    faster than the previous methods above.
+    :param df: pandas.DataFrame
+    :param n: data period
+    :Return: pandas.DataFrame
+    """
+    dt = df.diff().fillna(0)
+    Up = pd.DataFrame(np.where(dt > 0, dt, 0))
+    Down = pd.DataFrame(np.where(dt < 0, -dt, 0))
+    RolUp = Up.ewm(span = n).mean()
+    RolDown = Down.ewm(span = n).mean()
+    RSI = RolUp/RolDown
+    RSI = 100.0 - (100.0/(1.0 + RSI))
+    return RSI
+
+  def RSIFastCutler(self, df, n):
+    """
+    Calculate Relative Strength Index(RSI) for given data computationally
+    faster than the previous methods above.
+    :param df: pandas.DataFrame
+    :param n: data period
+    :Return: pandas.DataFrame
+    """
+    dt = df.diff().fillna(0)
+    Up = pd.DataFrame(np.where(dt > 0, dt, 0))
+    Down = pd.DataFrame(np.where(dt < 0, -dt, 0))
+    RolUp = Up.rolling(n).mean()
+    RolDown = Down.rolling(n).mean()
+    RSI = RolUp/RolDown
+    RSI = 100.0 - (100.0/(1.0 + RSI))
+    return RSI
+
   def ATR(self, df, n):
     '''
     :Argument:
@@ -668,9 +746,7 @@ class stock(object):
       
       
     
-        
-        
-    
+
     
 
   
@@ -678,7 +754,5 @@ class stock(object):
   
   
   
-  
-  
-  
+ 
   
