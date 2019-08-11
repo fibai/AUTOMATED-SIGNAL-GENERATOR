@@ -297,6 +297,19 @@ class stock(object):
     
     return self.df.rolling(self.n).mean()
   
+  def smaSum(self, df, n):
+    '''
+    Arguments:
+      df: dataframe or column vector
+      n: interval
+    :Return:
+      sum simple moving average
+    '''
+    self.df = df
+    self.n = n
+    
+    return self.df.rolling(self.n).sum()
+  
   def ema(self, df, n):
     '''
     Arguments:
@@ -321,6 +334,19 @@ class stock(object):
     self.n = n
     
     return self.df.rolling(self.n).std()
+
+  def emaStd(self, df, n):
+    '''
+    Arguments:
+      df: dataframe or column vector
+      n: interval
+    :Return:
+      standard deviation of a price
+    '''
+    self.df = df
+    self.n = n
+    
+    return self.df.ewm(self.n).std()
   
   def returns(self, df):
     '''
@@ -360,6 +386,41 @@ class stock(object):
     
     return np.power((df.ix[-1] / df.ix[0]), 1.0 / ((end - start).days / self.DAYS_IN_YEAR)) - 1.0
   
+  def momentum(self, n):
+    '''
+    :param: period
+    '''
+    return pd.Series(self.Close.diff(n), name = 'Momentum')
+
+  def CCI(self, n, useEMA = False):
+    '''
+    :param: peiod
+    '''
+    pp = (self.High + self.Low + self.Close)/3.0
+    if not useEMA:
+        cci = pd.Series(pp - self.sma(pp, n))/self.std(pp, n)
+    else:
+        cci = pd.Series(pp - self.ema(pp, n))/self.emaStd(pp, n)
+    return pd.Series(cci, name = 'CCI')
+
+  def massIndex(self, n):
+    '''
+    :param: n: period
+    :Return Mass index
+    '''
+    Range = self.High - self.Low
+    ema0 = self.ema(Range, n)
+    ema1 = self.ema(ema0, n)
+    mass = ema0/ema1
+    return pd.Series(self.smaSum(mass, n), name = 'Mass Index')        
+    
+  def forceIndex(self, n):
+    '''Docstring
+    :params: n: period
+    :Return: Force Index
+    '''
+    return pd.Series(self.Close.diff(n) * self.v.diff(n), name = 'Force Index')
+
   def quadrant(self):
     '''Docstring
     :Return:
@@ -383,28 +444,26 @@ class stock(object):
     return pd.DataFrame({'Low': bottom_line, 'first_quad': first_line, 
                          'middle_quad': middle_line, 'third_quad': third_line, 
                          'High': top_line})
-    
+
   def stochasticOscillator(self, df, n, sma = None, ema = None):
     """Docstring
     :param df: pandas.DataFrame
     :param n: data window
-    :param sma: data window
-    :param ema: data window
+    :param sma: simple moving average
+    :param ema: exponential moving average
     :return: pandas.DataFrame
     """
     SOk = ((self.Close - self.rolling_min(self.Low, n)) / (self.rolling_max(self.High, n) - self.rolling_min(self.Low, n)))*100
     if sma and ema:
         raise ValueError('sma and ema cannot both be true')
     elif sma:
-        print('Using sma for stochastic')
         SOk = self.sma(SOk, sma)
         SOd = np.array(self.sma(SOk, sma))
     elif ema:
-        print('Using ema for stochastic')
         SOk = self.ema(SOk, ema)
         SOd = np.array(self.ema(SOk, ema))
     return pd.DataFrame({'SOD': SOd, 'SOK': SOk})
-  
+
   def fibonacci_pivot_point(self):
     '''
     :Returns:
@@ -664,8 +723,7 @@ class stock(object):
     df['Low_PrevClose'] = abs(self.Low - self.Close.shift(1))
     df['True_Range'] = df[['High_Low', 'High_PrevClose', 'Low_PrevClose']].max(axis = 1)
     df = df.fillna(0)
-    df['ATR']=np.nan
-    df['ATR']= self.ema(df['True_Range'], n)
+    df['ATR'] = self.ema(df['True_Range'], n)
     return df['ATR']
   
   def SuperTrend(self, df, multiplier, n):
