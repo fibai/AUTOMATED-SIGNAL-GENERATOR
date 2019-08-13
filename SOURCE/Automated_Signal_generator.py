@@ -7,14 +7,31 @@ Created on Wed Mar 13 18:04:29 2019
 import os
 from STOCK import stock, loc
 import pandas as pd
+from oandapyV20 import API
+#from mpl_finance import candlestick2_ohlc
 pd.options.mode.chained_assignment = None
 import numpy as np
+import multiprocessing
+from threading import Thread
+import threading
 from datetime import datetime
+import lightgbm as lgb
+import matplotlib.pyplot as plt
+from Preprocess import process_time
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from sklearn.ensemble import (AdaBoostRegressor, #Adaboost regressor
+                              RandomForestRegressor, #Random forest regressor
+                              GradientBoostingRegressor, #Gradient boosting
+                              BaggingRegressor, #Bagging regressor
+                              ExtraTreesRegressor) #Extratrees regressor
 
-
-#%% SIGNAL GENERATOR --> MACD, BOLLINGER BAND, RSI, etc
+from DCollector import Path, Runcollector
+## SIGNAL GENERATOR --> MACD, BOLLINGER BAND, RSI, etc
   
-
+#Moving average signals
 class signalStrategy(object):
     def __init__(self):
         return
@@ -30,8 +47,7 @@ class signalStrategy(object):
         STOK_list_.append(DIR_OBJ[x].strip('.csv'))
         
       return STOK_list_
-
-    #Moving average signals
+  
     def MA_signal(self, STK_data, ema = None, sma = None, period_alpha = None,
                   period_beta = None):
       '''
@@ -41,10 +57,10 @@ class signalStrategy(object):
         :sma: default is None. if True, fucntion uses sma instead of ema
         :period_alpha: first moving average
         :period_beta: first moving average
+      :Complexity: Time: O(N) | Space: O(1)
       '''
       stock_data = stock(STK_data)
       df = stock_data.OHLC()
-      df['Close'] = stock_data.c
       if sma and ema:
         raise ValueError('sma and ema cannot be true at same time')
       elif ema:
@@ -52,11 +68,15 @@ class signalStrategy(object):
         alpha = stock_data.ema(stock_data.Close, period_alpha)
         beta = stock_data.ema(stock_data.Close, period_beta)
         df['signal'] = np.where(beta > alpha, 0, 1)
+        df[f'EMA {period_alpha}'] = alpha
+        df[f'EMA {period_beta}'] = beta
       elif sma:
         assert period_alpha < period_beta, 'Ensure period_alpha is less than period beta'
         alpha = stock_data.sma(stock_data.Close, period_alpha)
         beta = stock_data.sma(stock_data.Close, period_beta)
         df['signal'] = np.where(beta > alpha, 0, 1)
+        df[f'SMA {period_alpha}'] = alpha
+        df[f'SMA {period_beta}'] = beta
       #return siganl
       return df
       
@@ -67,43 +87,39 @@ class signalStrategy(object):
         df: stock data
       :Return type:
         signal
+      :Complexity: Time: O(N*log N) | Space: O(1)
       '''
       stock_data = stock(STK_data)
-      OHLC = stock_data.OHLC()
-      df = stock_data.CutlerRSI(OHLC, period)
-      
-      assert isinstance(df, pd.Series) or isinstance(df, pd.DataFrame)
-      #convert to dataframe
-      if isinstance(df, pd.Series):
-        df = df.to_frame()
-      else:
-        pass
+      df = stock_data.OHLC()
       #get signal
       #1--> indicates buy position
       #0 --> indicates sell posotion
-      df['signal'] = np.zeros(df.shape[0])
-      pos = 0
-      for ij in df.loc[:, ['RSI_Cutler_'+str(period)]].values:
-        print(df.loc[:, ['RSI_Cutler_'+str(period)]].values[pos])
-        if df.loc[:, ['RSI_Cutler_'+str(period)]].values[pos] >= up_bound:
-          df['signal'][pos:] = 1 #uptrend
-        elif df.loc[:, ['RSI_Cutler_'+str(period)]].values[pos] <= lw_bound:
-          df['signal'][pos:] = 0 #downtrend
-        pos +=1
+      rsi = np.array(stock_data.WilderRSI(stock_data.c, period))
+      rsi = np.nan_to_num(rsi)
+      signal = np.zeros_like(rsi)
+      for ii in range(len(signal)):
+          if rsi[ii] >= up_bound:
+              signal[ii:] = 1
+          elif rsi[ii] <= lw_bound:
+              signal[ii:] = 0
+      df['RSI'] = rsi
+      df['signal'] = signal
       print('*'*40)
       print('RSI Signal Generation completed')
       print('*'*40)
       return df
       
-    #MACD Signal
+    #RSI Signal
     def macd_crossOver(self, STK_data, fast, slow, signal):
       '''
       :Argument:
         MACD dataframe
       :Return type:
         MACD with Crossover signal
+      :Complexity: Time: O(N) | Space: O(1)
       '''
       stock_data = stock(STK_data)
+      OHLC = stock_data.OHLC()
       df = stock_data.MACD(fast, slow, signal)
       try:
         assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series)
@@ -114,8 +130,8 @@ class signalStrategy(object):
           pass
         #1--> indicates buy position
         #0 --> indicates sell posotion
-        df['Close'] = stock_data.c
         df['signal'] = np.where(df.MACD > df.MACD_SIGNAL, 1, 0)
+        df = pd.concat([OHLC, df], axis = 1)
       except IOError as e:
         raise('Dataframe required {}' .format(e))
       finally:
@@ -124,16 +140,18 @@ class signalStrategy(object):
         print('*'*40)
       return df
     
-    #SuperTrend Signal 
+    #SuperTrend Signal
     def SuperTrend_signal(self, STK_data, multiplier, period):
       '''
       :Argument:
         SuperTrend dataframe
       :Return type:
         Super trend signal
+      :Complexity: Time: O(N) | Space: O(1)
       '''
       stock_data = stock(STK_data)
       #--Call superTrend function
+      OHLC = stock_data.OHLC()
       df = stock_data.SuperTrend(STK_data, multiplier, period)
       try:
         assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series)
@@ -145,8 +163,8 @@ class signalStrategy(object):
         #1--> indicates buy position
         #0 --> indicates sell posotion
         df = df.fillna(0)
-        df['Close'] = stock_data.c
         df['signal'] = np.where(stock_data.Close >= df.SuperTrend, 1, 0)
+        df = pd.concat([OHLC, df], axis = 1)
       except IOError as e:
         raise('Dataframe required {}' .format(e))
       finally:
@@ -162,34 +180,38 @@ class signalStrategy(object):
             df: stock data
         :Return type:
             :bollinger band signal
+        :Complexity: Time: O(N*log N) | Space: O(1)
         '''
         stock_data = stock(STK_data)
-        Close = stock_data.Close
-        df = stock_data.Bolinger_Band(period, deviation)
-        df = df.fillna(value = 0)
-        assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series)
+        Close = np.array(stock_data.Close)
+        OHLC = stock_data.OHLC()
+        dfbol = stock_data.Bolinger_Band(period, deviation)
+        dfbol = dfbol.fillna(value = 0)
+        assert isinstance(dfbol, pd.DataFrame) or isinstance(dfbol, pd.Series)
         #dataframe
-        if isinstance(df, pd.Series):
-            df = df.to_frame()
+        if isinstance(dfbol, pd.Series):
+            dfbol = dfbol.to_frame()
         #get signal
         #1--> indicates buy position
         #0 --> indicates sell posotion
-        df['signal'] = np.zeros(df.shape[0])
-        pos = 0
-        for ii in Close:
-          print(Close[pos])
-          if Close[pos] >= df.Upper_band.values[pos]:
-            df['signal'][pos:] = 1
-          elif Close[pos] <= df.Lower_band.values[pos]:
-            df['signal'][pos:] = 0
-          pos += 1
-        df['Close'] = Close
+#        df['signal'] = np.zeros(df.shape[0])
+        Upperband = np.array(dfbol.Upper_band)
+        Lowerband = np.array(dfbol.Lower_band)
+        signal = np.zeros(dfbol.shape[0])
+        for ii in range(len(Close)):
+            if Close[ii] >= Upperband[ii]:
+                signal[ii:] = 1
+            elif Close[ii] <= Lowerband[ii]:
+                signal[ii:] = 0
+        df = pd.concat([OHLC, dfbol], axis = 1)
+        df['signal'] = signal
         print('*'*40)
         print('Bollinger Signal Generation completed')
         print('*'*40)
         return df
 
-#Signal Algorithm
+#Trading Algorithm
+#This is the position--> BUY, SELL, HOLD
 class Signal(object):
     def __init__(self):
         return
@@ -214,9 +236,16 @@ class Signal(object):
         [55] MOVING AVERAGE vs BOLLINGER BAND vs MACD
         [66] MOVING AVERAGE vs BOLLINGER BAND vs RSI
         [77] MOVING AVERAGE vs BOLLINGER BAND vs SUPER TREND
-        [88] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI
-        [99] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPER TREND
-        [111] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPER TREND
+        ---------------------
+        [88] MOVING AVERAGE vs RSI vs MACD
+        [99] MOVING AVERAGE vs RSI vs SUPERTREND
+        [111] MOVING AVERAGE vs MACD vs SUPERTREND
+        [222] MACD vs SUPERTREND vs RSI
+        [333] MACD vs SUPERTREND vs BOLLINGER BAND
+        ----------------------
+        [444] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI
+        [555] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPER TREND
+        [666] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPER TREND
         ------------------------------------------------------------------------
         :Arguments:
             :MACD:
@@ -230,6 +259,7 @@ class Signal(object):
         '''
         stock_data = stock(STK_data)
         OHLC = stock_data.OHLC()
+        columns = ['Open', 'High', 'Low', 'Close', 'signal']
         #--define strategy
         #--MA---
         if strategy == '1':
@@ -306,6 +336,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
         #--MA vs RSI--
         elif strategy == '8':
@@ -319,6 +351,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
         #--- MA vs BOLLINGER BAND ---
         elif strategy == '9':
@@ -345,6 +379,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
         #--BOLLINGER BAND vs RSI--
         elif strategy == '22':
@@ -358,6 +394,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
         #--BOLLINGER vs SUPERTREND --
         elif strategy == '33':
@@ -377,13 +415,15 @@ class Signal(object):
             RSI_signal = RSI.signal.values
             SuperTrend_Signal = SuperTrend.signal.values
             OHLC['Position'] = ''
-            for ii in range(BB_signal.shape[0]):
+            for ii in range(SuperTrend_Signal.shape[0]):
                 if RSI_signal[ii] == 1 and SuperTrend_Signal[ii] == 1:
                     OHLC.Position[ii] = 'BUY'
                 elif RSI_signal[ii] == 0 and SuperTrend_Signal[ii] == 0:
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
         #--MOVING AVERAGE vs BOLLINGER BAND vs MACD --
         elif strategy == '55':
@@ -400,6 +440,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
         #--MOVING AVERAGE vs BOLLINGER BAND vs RSI --
         elif strategy == '66':
@@ -416,6 +458,8 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
         #--MOVING AVERAGE vs BOLLINGER BAND vs SUPER TREND --
         elif strategy == '77':
@@ -433,8 +477,100 @@ class Signal(object):
                 else:
                     OHLC.Position[ii] = 'HOLD'
             return OHLC
-        #--MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI --
+        #--MOVING AVERAGE vs RSI vs MACD --
         elif strategy == '88':
+            Moving_avg = MA.signal
+            RSI_signal = RSI.signal.values
+            MACD_signal = MACD.signal.values
+            OHLC['Position'] = ''
+            for ii in range(Moving_avg.shape[0]):
+                if Moving_avg[ii] == 1 and RSI_signal[ii] == 1 and\
+                    MACD_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif Moving_avg[ii] == 0 and RSI_signal[ii] == 0 and\
+                    MACD_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
+            return OHLC
+        #--MOVING AVERAGE vs RSI vs SUPERTREND --
+        elif strategy == '99':
+            Moving_avg = MA.signal
+            RSI_signal = RSI.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            OHLC['Position'] = ''
+            for ii in range(Moving_avg.shape[0]):
+                if Moving_avg[ii] == 1 and RSI_signal[ii] == 1 and\
+                    SuperTrend_Signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif Moving_avg[ii] == 0 and RSI_signal[ii] == 0 and\
+                    SuperTrend_Signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
+        #--MOVING AVERAGE vs MACD vs SUPERTREND --
+        elif strategy == '111':
+            Moving_avg = MA.signal
+            MACD_signal = MACD.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            OHLC['Position'] = ''
+            for ii in range(Moving_avg.shape[0]):
+                if Moving_avg[ii] == 1 and MACD_signal[ii] == 1 and\
+                    SuperTrend_Signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif Moving_avg[ii] == 0 and MACD_signal[ii] == 0 and\
+                    SuperTrend_Signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
+            return OHLC
+        #--MACD vs SUPERTREND vs RSI --
+        elif strategy == '222':
+            MACD_signal = MACD.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            RSI_signal = RSI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(RSI_signal.shape[0]):
+                if MACD_signal[ii] == 1 and SuperTrend_Signal[ii] == 1 and\
+                    RSI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif MACD_signal[ii] == 0 and SuperTrend_Signal[ii] == 0 and\
+                    RSI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
+            return OHLC
+        #--MACD vs SUPERTREND vs BOLLINGER BAND --
+        elif strategy == '333':
+            MACD_signal = MACD.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            BB_signal = Bollinger_Band.signal.values
+            OHLC['Position'] = ''
+            for ii in range(MACD_signal.shape[0]):
+                if MACD_signal[ii] == 1 and SuperTrend_Signal[ii] == 1 and\
+                    BB_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif MACD_signal[ii] == 0 and SuperTrend_Signal[ii] == 0 and\
+                    BB_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
+            return OHLC
+        #--MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI --
+        elif strategy == '444':
             Moving_avg = MA.signal
             BB_signal = Bollinger_Band.signal.values
             MACD_signal = MACD.signal.values
@@ -449,9 +585,12 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
             return OHLC
         #--MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPER TREND --
-        elif strategy == '99':
+        elif strategy == '555':
             Moving_avg = MA.signal
             BB_signal = Bollinger_Band.signal.values
             MACD_signal = MACD.signal.values
@@ -466,9 +605,11 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
         #--MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPER TREND--
-        elif strategy == '111':
+        elif strategy == '666':
             Moving_avg = MA.signal
             BB_signal = Bollinger_Band.signal.values
             MACD_signal = MACD.signal.values
@@ -486,9 +627,41 @@ class Signal(object):
                     OHLC.Position[ii] = 'SELL'
                 else:
                     OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
+            return OHLC
+        elif strategy == '777':
+            MACD_signal = MACD.signal.values
+            RSI_signal = RSI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(MACD_signal.shape[0]):
+                if MACD_signal[ii] == 1 and RSI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif MACD_signal[ii] == 0 and RSI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
+            return OHLC
+        elif strategy == '888':
+            MACD_signal = MACD.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            OHLC['Position'] = ''
+            for ii in range(MACD_signal.shape[0]):
+                if MACD_signal[ii] == 1 and SuperTrend_Signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif MACD_signal[ii] == 0 and SuperTrend_Signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
     
-    def main(self, path, strategy, STOCK, DEVIATION = None, PERIOD = None, LOWER_BOUND = None,
+    def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
              UPPER_BOUND = None, MIDLINE = None, FAST = None, SLOW = None, SIGNAL = None, TIMEFRAME = None,
              PERIOD_ALPHA = None, PERIOD_BETA = None):
         '''
@@ -500,7 +673,7 @@ class Signal(object):
             [x] BOLLINGER BAND
             [X] MACD
             [X] RSI
-            [X] SUPER TREND
+            [X] SUPERTREND
             ========================
             STRATEGIES
             ========================
@@ -508,28 +681,40 @@ class Signal(object):
             [2] BOLLINGER BAND
             [3] MACD
             [4] RSI
-            [5] SUPER TREND
-            [6] MA vs SUPER_TREND
+            [5] SUPERTREND
+            -----------------------
+            [6] MA vs SUPERTREND
             [7] MA vs MACD
             [8] MA vs RSI
             [9] MA vs BOLLINGER BAND
             X[11] BOLLINGER BAND vs MACD
             [22] BOLLINGER BAND vs RSI
             [33] BOLLINGER vs SUPERTREND
-            X[44] RSI vs SUPER TREND
+            X[44] RSI vs SUPERTREND
+            ------------------------
             [55] MOVING AVERAGE vs BOLLINGER BAND vs MACD
             [66] MOVING AVERAGE vs BOLLINGER BAND vs RSI
-            [77] MOVING AVERAGE vs BOLLINGER BAND vs SUPER TREND
-            [88] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI
-            [99] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPER TREND
-            [111] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPER TREND
+            [77] MOVING AVERAGE vs BOLLINGER BAND vs SUPERTREND
+            ---------------------
+            [88] MOVING AVERAGE vs RSI vs MACD
+            [99] MOVING AVERAGE vs RSI vs SUPERTREND
+            [111] MOVING AVERAGE vs MACD vs SUPERTREND
+            [222] MACD vs SUPERTREND vs RSI
+            [333] MACD vs SUPERTREND vs BOLLINGER BAND
+            ----------------------
+            [444] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI
+            [555] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPERTREND
+            [666] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPERTREND
+            ------------------------------
+            [777] MACD vs RSI
+            [888] MACD vs SUPERTREND
         :return type:
             signal saved to prediction table
         '''
         from os.path import join
-        if not os.path.exists(path + '/PREDICTED/{}'.format(TIMEFRAME)):
-          os.makedirs(path + '/PREDICTED/{}'.format(TIMEFRAME))
-#        for ii in STOCKLIST:
+        if not os.path.exists(path+"/PREDICTED/STRATEGY_{}/{}".format(str(strategy), TIMEFRAME)):
+            os.makedirs(path+ "/PREDICTED/STRATEGY_{}/{}".format(str(strategy), TIMEFRAME))
+
         datapath = join(path, 'DATASETS/{}/'.format(STOCK))
         #-------get the data we need------------------
         df = loc.read_csv(join(datapath, STOCK + '_{}'.format(TIMEFRAME) + str('.csv')))
@@ -576,7 +761,7 @@ class Signal(object):
         elif strategy == '33':
             df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
-            signal = Signal().tradingSignal(df, Bollinger_Band= df_BB, SuperTrend= df_RSI, strategy = strategy)
+            signal = Signal().tradingSignal(df, Bollinger_Band= df_BB, SuperTrend= df_STrend, strategy = strategy)
         elif strategy == '44':
             df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
@@ -596,25 +781,65 @@ class Signal(object):
             df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
             signal = Signal().tradingSignal(df, MA= MA_alphbeta, Bollinger_Band= df_BB, SuperTrend=df_STrend, strategy = strategy)
+            #---------------------------------
+        #--MOVING AVERAGE vs RSI vs MACD
         elif strategy == '88':
+            MA_alphbeta =signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            signal = Signal().tradingSignal(df, MA= MA_alphbeta, RSI = df_RSI, MACD = df_MACD, strategy = strategy)
+        #--MOVING AVERAGE vs RSI vs SUPERTREND
+        elif strategy == '99':
+            MA_alphbeta =signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            signal = Signal().tradingSignal(df, MA= MA_alphbeta, RSI= df_RSI, SuperTrend=df_STrend, strategy = strategy)
+        #--MOVING AVERAGE vs MACD vs SUPERTREND
+        elif strategy == '111':
+            MA_alphbeta =signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            signal = Signal().tradingSignal(df, MA= MA_alphbeta, MACD= df_MACD, SuperTrend=df_STrend, strategy = strategy)
+        #--MACD vs SUPERTREND vs RSI
+        elif strategy == '222':
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            signal = Signal().tradingSignal(df, MACD= df_MACD, SuperTrend=df_STrend, RSI=df_RSI, strategy = strategy)
+        #--MACD vs SUPERTREND vs BOLLINGER BAND
+        elif strategy == '333':
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
+            signal = Signal().tradingSignal(df, MACD=df_MACD, SuperTrend=df_STrend, Bollinger_Band= df_BB, strategy = strategy)
+        #---
+        elif strategy == '444':
             MA_alphbeta = signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
             df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
             df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
             df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
             signal = Signal().tradingSignal(df, MA= MA_alphbeta, Bollinger_Band= df_BB, MACD=df_MACD, RSI=df_RSI, strategy = strategy)
-        elif strategy == '99':
+        elif strategy == '555':
             MA_alphbeta = signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
             df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
             df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
             signal = Signal().tradingSignal(df, MA= MA_alphbeta, Bollinger_Band= df_BB, MACD=df_MACD, SuperTrend=df_STrend, strategy = strategy)
-        elif strategy == '111':
+        elif strategy == '666':
             MA_alphbeta = signalStrategy().MA_signal(stock_data, ema = True, period_alpha=PERIOD_ALPHA, period_beta=PERIOD_BETA)
             df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
             df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
             df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
             signal = Signal().tradingSignal(df, MA= MA_alphbeta, Bollinger_Band= df_BB, MACD=df_MACD, RSI=df_RSI, SuperTrend=df_STrend, strategy = strategy)
+        elif strategy == '777':
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            signal = Signal().tradingSignal(df, MACD=df_MACD, RSI=df_RSI, strategy = strategy)
+        elif strategy == '888':
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            signal = Signal().tradingSignal(df, MACD=df_MACD, SuperTrend=df_STrend, strategy = strategy)
         else:
             pass
     
@@ -623,19 +848,21 @@ class Signal(object):
         print('*'*40)
         print('Saving file')
         #---strategy selection-----
-        loc.set_path(path+ '/PREDICTED/{}'.format(TIMEFRAME))
+        loc.set_path(path+ '/PREDICTED/STRATEGY_{}/{}'.format(str(strategy), TIMEFRAME))
         signal.to_csv('{}'.format(STOCK)+ '.csv', mode='w')
 
 
-class Run(object):
-    def __init__(self, path, strategy, STOCKLIST, DEVIATION, PERIOD, LOWER_BOUND,\
+
+class Run(Runcollector):
+    def __init__(self, path, strategy, STOCKLIST, DEVIATION, MULTIPLIER, PERIOD, LOWER_BOUND,\
                  UPPER_BOUND, MIDLINE, FAST, SLOW, SIGNAL, TIMEFRAME,\
-                 PERIOD_ALPHA, PERIOD_BETA, timer):
+                 PERIOD_ALPHA, PERIOD_BETA):
         
         self.path = path
         self.strategy = strategy
         self.STOCKLIST = STOCKLIST
         self.DEVIATION = DEVIATION
+        self.MULTIPLIER = MULTIPLIER
         self.PERIOD = PERIOD
         self.LOWER_BOUND = LOWER_BOUND
         self.UPPER_BOUND = UPPER_BOUND
@@ -646,10 +873,17 @@ class Run(object):
         self.TIMEFRAME = TIMEFRAME
         self.PERIOD_ALPHA = PERIOD_ALPHA
         self.PERIOD_BETA = PERIOD_BETA
-        self.timer = timer
+        
+        with open(self.path['mainPath'] +'/DOCS/token.txt') as tk:
+            token = tk.readline().strip()
+            self.client = API(access_token = token)
+            
+        Path(self.path)
+        super().__init__(self.path, self.path['start'], self.path['end'], self.client, self.TIMEFRAME)
+        
         try:
             if self.STOCKLIST is None:
-                raise ValueError('Incorrect stock name\n Enter atleast one stock name or fx pair')
+                raise ValueError('Incorrect stock name\n Enter atleast one stock name or stock/fx pair')
             else:
                 thread = []
                 for ii, stkList in enumerate(self.STOCKLIST):
@@ -663,78 +897,76 @@ class Run(object):
             raise ValueError('Thread unable to start')
             
     def runSignal(self, stkname):
-        return Signal().main(path = self.path, strategy = self.strategy, STOCK = stkname, DEVIATION = self.DEVIATION, PERIOD = self.PERIOD, LOWER_BOUND = self.LOWER_BOUND,\
+        return Signal().main(path = self.path['mainPath'], strategy = self.strategy, STOCK = stkname, DEVIATION = self.DEVIATION, MULTIPLIER = self.MULTIPLIER, PERIOD = self.PERIOD, LOWER_BOUND = self.LOWER_BOUND,\
               UPPER_BOUND = self.UPPER_BOUND, MIDLINE = self.MIDLINE, FAST = self.FAST, SLOW = self.SLOW, SIGNAL = self.SIGNAL, TIMEFRAME = self.TIMEFRAME,\
               PERIOD_ALPHA = self.PERIOD_ALPHA, PERIOD_BETA = self.PERIOD_BETA)
         
     def runMain(self, stkname):
         self.stkname = stkname
-        while True:
-            if not self.path:
-                break
-            elif not self.strategy:
-                raise ValueError('Strategy not define')
-            elif not self.DEVIATION:
-                raise ValueError('DEVIATION required')
-            elif not self.PERIOD:
-                raise ValueError('PERIOD required')
-            elif not self.LOWER_BOUND:
-                raise ValueError('LOWER_BOUND required')
-            elif not self.UPPER_BOUND:
-                raise ValueError('UPPER_BOUND required')
-            elif not self.FAST:
-                raise ValueError('FAST required')
-            elif not self.SLOW:
-                raise ValueError('SLOW required')
-            elif not self.SIGNAL:
-                raise ValueError('SIGNAL required')
-            elif not self.TIMEFRAME:
-                raise ValueError('TIMEFRAME required')
-            elif not self.PERIOD_ALPHA:
-                raise ValueError('PERIOD_ALPHA required')
-            elif not self.PERIOD_BETA:
-                raise ValueError('PERIOD_BETA required')
-            else:
-                self.runSignal(self.stkname)
-            print('program running in background')
-            time.sleep(self.timer)
-        
-            
+        import time
+        begin = time.time()
+        if not self.path:
+            raise ValueError('path not provided') 
+        elif not self.strategy:
+            raise ValueError('Strategy not define')
+        elif not self.DEVIATION:
+            raise ValueError('DEVIATION required')
+        elif not self.PERIOD:
+            raise ValueError('PERIOD required')
+        elif not self.LOWER_BOUND:
+            raise ValueError('LOWER_BOUND required')
+        elif not self.UPPER_BOUND:
+            raise ValueError('UPPER_BOUND required')
+        elif not self.FAST:
+            raise ValueError('FAST required')
+        elif not self.SLOW:
+            raise ValueError('SLOW required')
+        elif not self.SIGNAL:
+            raise ValueError('SIGNAL required')
+        elif not self.TIMEFRAME:
+            raise ValueError('TIMEFRAME required')
+        elif not self.PERIOD_ALPHA:
+            raise ValueError('PERIOD_ALPHA required')
+        elif not self.PERIOD_BETA:
+            raise ValueError('PERIOD_BETA required')
+        else:
+            self.runSignal(self.stkname)
+        print(f'End time {time.time() - begin}')
+        print(datetime.today())
+        print('program running in background')
+
 #%% main script 
 if __name__ == '__main__':
-  import multiprocessing
-  import time
-  #---------GLOBAL SETTINGS-------------------
-  path = '/home/kenneth/Documents/GIT_PROJECTS/AI-Signal-Generator'
-  STRATEGY = '111'
-  DEVIATION = MULTIPLIER = 2
-  PERIOD = 20
-  #---------MA SETTINGS--------------
-  PERIOD_ALPHA = 10
-  PERIOD_BETA = 20
-  #--------RSI_SETTINGS------------------------
-  LOWER_BOUND = 30
-  UPPER_BOUND = 70
-  MIDLINE = 0
-  FILLCOLOR = 'skyblue'
-  #--------MACD SETTINGS-----------------------
-  FAST = 12
-  SLOW = 26
-  SIGNAL = 9
-  TIMEFRAME = 'H1'
-  instrument = ['EUR_USD', 'GBP_USD', 'AUD_CAD', 'AUD_USD',
-                'BTC_USD', 'EUR_CAD', 'EUR_GBP', 'EUR_NZD',
-                'NZD_USD']
-  
-  Run(path = path, strategy = STRATEGY, STOCKLIST = instrument, DEVIATION = DEVIATION, PERIOD = PERIOD, LOWER_BOUND = LOWER_BOUND,\
-         UPPER_BOUND = UPPER_BOUND, MIDLINE = MIDLINE, FAST = FAST, SLOW = SLOW, SIGNAL = SIGNAL, TIMEFRAME = TIMEFRAME,\
-         PERIOD_ALPHA = PERIOD_ALPHA, PERIOD_BETA = PERIOD_BETA, timer = 1800)
-  
-
+    import multiprocessing
+    import time
+    #---------GLOBAL SETTINGS-------------------
+    path = '/home/kenneth/Documents/GIT_PROJECTS/AI-Signal-Generator'
+    STRATEGY = '111'
+    DEVIATION = MULTIPLIER = 2
+    PERIOD = 20
+    #---------MA SETTINGS--------------
+    PERIOD_ALPHA = 10
+    PERIOD_BETA = 20
+    #--------RSI_SETTINGS------------------------
+    LOWER_BOUND = 30
+    UPPER_BOUND = 70
+    MIDLINE = 0
+    FILLCOLOR = 'skyblue'
+    #--------MACD SETTINGS-----------------------
+    FAST = 12
+    SLOW = 26
+    SIGNAL = 9
+    TIMEFRAME = 'H1'
+    instrument = ['EUR_USD', 'GBP_USD', 'AUD_CAD', 'AUD_USD',
+                 'BTC_USD', 'EUR_CAD', 'EUR_GBP', 'EUR_NZD',
+                 'NZD_USD']
+      
+    Run(path = path, strategy = STRATEGY, STOCKLIST = instrument, DEVIATION = DEVIATION, PERIOD = PERIOD, LOWER_BOUND = LOWER_BOUND,\
+        UPPER_BOUND = UPPER_BOUND, MIDLINE = MIDLINE, FAST = FAST, SLOW = SLOW, SIGNAL = SIGNAL, TIMEFRAME = TIMEFRAME,\
+        PERIOD_ALPHA = PERIOD_ALPHA, PERIOD_BETA = PERIOD_BETA, timer = 1800)
 
     
-    
-    
+
     
     
     
