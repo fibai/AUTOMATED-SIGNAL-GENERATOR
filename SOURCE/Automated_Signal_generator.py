@@ -726,6 +726,47 @@ class Signal(object):
             rsiRequired = RSI.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
+        elif strategy == '2222':
+            KT_signal = Keltner.signal.values
+            MACD_signal = MACD.signal.values
+            OHLC['Position'] = ''
+            for ii in range(KT_signal.shape[0]):
+                if KT_signal[ii] == 1 and MACD_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif KT_signal[ii] == 0 and MACD_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            macdRequired = MACD.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
+            return OHLC
+        elif strategy == '3333':
+            KT_signal = Keltner.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            OHLC['Position'] = ''
+            for ii in range(KT_signal.shape[0]):
+                if KT_signal[ii] == 1 and SuperTrend_Signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif KT_signal[ii] == 0 and SuperTrend_Signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            return OHLC
+        elif strategy == '4444':
+            KT_signal = Keltner.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            RSI_signal = RSI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(KT_signal.shape[0]):
+                if KT_signal[ii] == 1 and SuperTrend_Signal[ii] == 1 and RSI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif KT_signal[ii] == 0 and SuperTrend_Signal[ii] == 0 and RSI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
     
     def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
              UPPER_BOUND = None, MIDLINE = None, FAST = None, SLOW = None, SIGNAL = None, TIMEFRAME = None,
@@ -776,6 +817,9 @@ class Signal(object):
             [888] MACD vs SUPERTREND
             [999] RSI vs SUPERTREND vs BOLLINGER BAND
             [1111] RSI vs KELTNER CHANNEL
+            [2222] MACD vs KELTNER CHANNEL
+            [3333] SUPERTREND vs KELTNER CHANNEL
+            [444] RSI vs SUPERTREND vs KELTNER CHANNEL
         :return type:
             signal saved to prediction table
         '''
@@ -917,9 +961,21 @@ class Signal(object):
             df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
             df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
             signal = Signal().tradingSignal(df, RSI=df_RSI, Keltner= df_KT, strategy = strategy)
+        elif strategy == '2222':
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
+            signal = Signal().tradingSignal(df, MACD=df_MACD, Keltner= df_KT, strategy = strategy)
+        elif strategy == '3333':
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            signal = Signal().tradingSignal(df, SuperTrend=df_STrend, Keltner= df_KT, strategy = strategy)
+        elif strategy == '4444':
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            signal = Signal().tradingSignal(df, SuperTrend=df_STrend, Keltner= df_KT, RSI=df_RSI, strategy = strategy)
         else:
             pass
-    
         print('*'*40)
         print('Signal generation completed...')
         print('*'*40)
