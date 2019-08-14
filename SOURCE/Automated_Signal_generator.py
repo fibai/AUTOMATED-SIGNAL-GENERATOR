@@ -122,7 +122,7 @@ class signalStrategy(object):
       OHLC = stock_data.OHLC()
       df = stock_data.MACD(fast, slow, signal)
       try:
-        assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series)
+        assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series), 'Not a series or dataframe'
         #dataframe
         if isinstance(df, pd.Series):
           df = df.to_frame()
@@ -154,7 +154,7 @@ class signalStrategy(object):
       OHLC = stock_data.OHLC()
       df = stock_data.SuperTrend(STK_data, multiplier, period)
       try:
-        assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series)
+        assert isinstance(df, pd.DataFrame) or isinstance(df, pd.Series), 'Not a pandas series or dataframe'
         #dataframe
         if isinstance(df, pd.Series):
           df = df.to_frame()
@@ -187,14 +187,13 @@ class signalStrategy(object):
         OHLC = stock_data.OHLC()
         dfbol = stock_data.Bolinger_Band(period, deviation)
         dfbol = dfbol.fillna(value = 0)
-        assert isinstance(dfbol, pd.DataFrame) or isinstance(dfbol, pd.Series)
+        assert isinstance(dfbol, pd.DataFrame) or isinstance(dfbol, pd.Series), 'Not a pandas series or dataframe'
         #dataframe
         if isinstance(dfbol, pd.Series):
             dfbol = dfbol.to_frame()
         #get signal
         #1--> indicates buy position
         #0 --> indicates sell posotion
-#        df['signal'] = np.zeros(df.shape[0])
         Upperband = np.array(dfbol.Upper_band)
         Lowerband = np.array(dfbol.Lower_band)
         signal = np.zeros(dfbol.shape[0])
@@ -209,14 +208,50 @@ class signalStrategy(object):
         print('Bollinger Signal Generation completed')
         print('*'*40)
         return df
-
+    
+    #Keltner Channel
+    def keltner_signal(self, STK_data, period, multiplier):
+        '''
+        :Argument:
+            df: stock data
+        :Return type:
+            :bollinger band signal
+        :Complexity: Time: O(N*log N) | Space: O(1)
+        '''
+        stock_data = stock(STK_data)
+        Close = np.array(stock_data.Close)
+        OHLC = stock_data.OHLC()
+        dfkc = stock_data.Keltner_channel(STK_data, period, multiplier)
+        dfkc = dfkc.fillna(value = 0)
+        assert isinstance(dfkc, pd.DataFrame) or isinstance(dfkc, pd.Series), 'Not a pandas series or dataframe'
+        #dataframe
+        if isinstance(dfkc, pd.Series):
+            dfkc = dfkc.to_frame()
+        #get signal
+        #1--> indicates buy position
+        #0 --> indicates sell posotion
+        Upperband = np.array(dfkc.ub)
+        Lowerband = np.array(dfkc.lb)
+        signal = np.zeros(dfkc.shape[0])
+        for ii in range(len(Close)):
+            if Close[ii] >= Upperband[ii]:
+                signal[ii:] = 1
+            elif Close[ii] <= Lowerband[ii]:
+                signal[ii:] = 0
+        df = pd.concat([OHLC, dfkc], axis = 1)
+        df['signal'] = signal
+        print('*'*40)
+        print('Keltner Signal Generation completed')
+        print('*'*40)
+        return df
+    
 #Trading Algorithm
 #This is the position--> BUY, SELL, HOLD
 class Signal(object):
     def __init__(self):
         return
     
-    def tradingSignal(self, STK_data, RSI = None, MACD = None, Bollinger_Band = None, SuperTrend = None, MA = None, strategy = None):
+    def tradingSignal(self, STK_data, RSI = None, MACD = None, Bollinger_Band = None, SuperTrend = None, MA = None, Keltner = None, strategy = None):
         '''
         STRATEGIES
         ========================
@@ -660,10 +695,41 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
+        elif strategy == '999':
+            BB_signal = Bollinger_Band.signal.values
+            RSI_signal = RSI.signal.values
+            SuperTrend_Signal = SuperTrend.signal.values
+            OHLC['Position'] = ''
+            for ii in range(BB_signal.shape[0]):
+                if BB_signal[ii] == 1 and RSI_signal[ii] == 1 and\
+                    SuperTrend_Signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif BB_signal[ii] == 0 and RSI_signal[ii] == 0 and\
+                    SuperTrend_Signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
+        elif strategy == '1111':
+            KT_signal = Keltner.signal.values
+            RSI_signal = RSI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(KT_signal.shape[0]):
+                if KT_signal[ii] == 1 and RSI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif KT_signal[ii] == 0 and RSI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
     
     def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
              UPPER_BOUND = None, MIDLINE = None, FAST = None, SLOW = None, SIGNAL = None, TIMEFRAME = None,
-             PERIOD_ALPHA = None, PERIOD_BETA = None):
+             PERIOD_ALPHA = None, PERIOD_BETA = None, periodATR = None):
         '''
         :param:
             :strategy: select a startegy to signal signal 
@@ -708,6 +774,8 @@ class Signal(object):
             ------------------------------
             [777] MACD vs RSI
             [888] MACD vs SUPERTREND
+            [999] RSI vs SUPERTREND vs BOLLINGER BAND
+            [1111] RSI vs KELTNER CHANNEL
         :return type:
             signal saved to prediction table
         '''
@@ -840,6 +908,15 @@ class Signal(object):
             df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
             signal = Signal().tradingSignal(df, MACD=df_MACD, SuperTrend=df_STrend, strategy = strategy)
+        elif strategy == '999':
+            df_BB = signalStrategy().bollinger_band_signal(df, PERIOD, deviation = DEVIATION)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
+            signal = Signal().tradingSignal(df, Bollinger_Band= df_BB, RSI=df_RSI, SuperTrend=df_STrend, strategy = strategy)
+        elif strategy == '1111':
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            signal = Signal().tradingSignal(df, RSI=df_RSI, Keltner= df_KT, strategy = strategy)
         else:
             pass
     
@@ -856,7 +933,7 @@ class Signal(object):
 class Run(Runcollector):
     def __init__(self, path, strategy, STOCKLIST, DEVIATION, MULTIPLIER, PERIOD, LOWER_BOUND,\
                  UPPER_BOUND, MIDLINE, FAST, SLOW, SIGNAL, TIMEFRAME,\
-                 PERIOD_ALPHA, PERIOD_BETA):
+                 PERIOD_ALPHA, PERIOD_BETA, PERIODATR):
         
         self.path = path
         self.strategy = strategy
@@ -873,6 +950,7 @@ class Run(Runcollector):
         self.TIMEFRAME = TIMEFRAME
         self.PERIOD_ALPHA = PERIOD_ALPHA
         self.PERIOD_BETA = PERIOD_BETA
+        self.PERIODATR = PERIODATR
         
         with open(self.path['mainPath'] +'/DOCS/token.txt') as tk:
             token = tk.readline().strip()
@@ -899,7 +977,7 @@ class Run(Runcollector):
     def runSignal(self, stkname):
         return Signal().main(path = self.path['mainPath'], strategy = self.strategy, STOCK = stkname, DEVIATION = self.DEVIATION, MULTIPLIER = self.MULTIPLIER, PERIOD = self.PERIOD, LOWER_BOUND = self.LOWER_BOUND,\
               UPPER_BOUND = self.UPPER_BOUND, MIDLINE = self.MIDLINE, FAST = self.FAST, SLOW = self.SLOW, SIGNAL = self.SIGNAL, TIMEFRAME = self.TIMEFRAME,\
-              PERIOD_ALPHA = self.PERIOD_ALPHA, PERIOD_BETA = self.PERIOD_BETA)
+              PERIOD_ALPHA = self.PERIOD_ALPHA, PERIOD_BETA = self.PERIOD_BETA, periodATR = self.PERIODATR)
         
     def runMain(self, stkname):
         self.stkname = stkname
@@ -929,6 +1007,8 @@ class Run(Runcollector):
             raise ValueError('PERIOD_ALPHA required')
         elif not self.PERIOD_BETA:
             raise ValueError('PERIOD_BETA required')
+        elif not self.PERIODATR:
+            raise ValueError('PERIOD ATR required')
         else:
             self.runSignal(self.stkname)
         print(f'End time {time.time() - begin}')
