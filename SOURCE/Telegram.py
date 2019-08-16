@@ -46,6 +46,10 @@ class telegramBot(object):
         return chr(ord(code[0]) + OFFSET) + chr(ord(code[1]) + OFFSET)
     
     def tgsignal(self, signal):
+        '''
+        :param:
+            signal: dataframe of signals
+        '''
         import telegram
         with open(os.path.join(self.path['mainPath'], self.path['telegram'])) as tgt:
             token, chatID= tgt.readlines()
@@ -104,5 +108,29 @@ class telegramBot(object):
                  parse_mode=telegram.ParseMode.HTML)
         
         
-        
-        
+if __name__ == '__main__':
+    import datetime
+    import pandas as pd
+    path = {'mainPath': '/home/kenneth/Documents/GIT_PROJECTS/AI-Signal-Generator',
+            'acountPath': 'DOCS/account_id.txt',
+            'tokenPath': 'DOCS/token.txt',
+            'telegram': 'DOCS/telegram.txt',
+            'predicted': 'PREDICTED',
+            'signals': 'SIGNALS',
+            'start': '2019-07-01T00:00:00Z',
+            'end': str(datetime.datetime.utcnow().isoformat('T')[:-7] +'Z'),
+            'environment': 'practice',
+            'strategy': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '11',
+                         '22', '33', '44', '55', '66', '77', '88', '99', '111',
+                         '222', '333', '444', '555', '666', '777', '888', '999', '1111',
+                         '2222', '3333', '4444'],
+            'instruments': 'AUD_USD,BCO_USD,BTC_USD,DE30_EUR,EUR_AUD,EUR_JPY,EUR_USD,GBP_JPY,GBP_USD,'+\
+                            'NAS100_USD,SPX500_USD,US30_USD,USD_CAD,USD_JPY,XAU_USD',
+            'timeframes': ['M15', 'M30', 'H1', 'H2', 'H3', 'H4', 'H6', 'H8',
+                           'H12', 'D', 'W']}
+    signal = pd.read_csv(os.path.join(path['mainPath'], path['signals']+'/signals.csv')).iloc[:, 1:]
+    telegramBot(path).tgsignal(signal)
+    
+    
+    
+    
