@@ -1102,6 +1102,24 @@ class Run(Runcollector):
 if __name__ == '__main__':
     import multiprocessing
     import time
+    path = {'mainPath': '/home/kenneth/Documents/GIT_PROJECTS/AI-Signal-Generator',
+            'acountPath': 'DOCS/account_id.txt',
+            'tokenPath': 'DOCS/token.txt',
+            'telegram': 'DOCS/telegram.txt',
+            'predicted': 'PREDICTED',
+            'signals': 'SIGNALS',
+            'start': '2019-07-01T00:00:00Z',
+            'end': str(datetime.datetime.utcnow().isoformat('T')[:-7] +'Z'),
+            'environment': 'practice',
+            'strategy': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '11',
+                         '22', '33', '44', '55', '66', '77', '88', '99', '111',
+                         '222', '333', '444', '555', '666', '777', '888', '999', '1111',
+                         '2222', '3333', '4444'],
+            'instruments': 'AUD_USD,BCO_USD,BTC_USD,DE30_EUR,EUR_AUD,EUR_JPY,EUR_USD,GBP_JPY,GBP_USD,'+\
+                            'NAS100_USD,SPX500_USD,US30_USD,USD_CAD,USD_JPY,XAU_USD',
+            'timeframes': ['M15', 'M30', 'H1', 'H2', 'H3', 'H4', 'H6', 'H8',
+                           'H12', 'D', 'W']}
+            
     #---------GLOBAL SETTINGS-------------------
     path = '/home/kenneth/Documents/GIT_PROJECTS/AI-Signal-Generator'
     STRATEGY = '111'
@@ -1120,13 +1138,11 @@ if __name__ == '__main__':
     SLOW = 26
     SIGNAL = 9
     TIMEFRAME = 'H1'
-    instrument = ['EUR_USD', 'GBP_USD', 'AUD_CAD', 'AUD_USD',
-                 'BTC_USD', 'EUR_CAD', 'EUR_GBP', 'EUR_NZD',
-                 'NZD_USD']
-      
-    Run(path = path, strategy = STRATEGY, STOCKLIST = instrument, DEVIATION = DEVIATION, PERIOD = PERIOD, LOWER_BOUND = LOWER_BOUND,\
-        UPPER_BOUND = UPPER_BOUND, MIDLINE = MIDLINE, FAST = FAST, SLOW = SLOW, SIGNAL = SIGNAL, TIMEFRAME = TIMEFRAME,\
-        PERIOD_ALPHA = PERIOD_ALPHA, PERIOD_BETA = PERIOD_BETA, timer = 1800)
+    PERIODATR = 14
+    
+    Run(path = path, strategy = STRATEGY, STOCKLIST = path['instruments'].split(','), DEVIATION = DEVIATION, MULTIPLIER = MULTIPLIER, PERIOD = PERIOD, LOWER_BOUND = LOWER_BOUND,\
+            UPPER_BOUND = UPPER_BOUND, MIDLINE = MIDLINE, FAST = FAST, SLOW = SLOW, SIGNAL = SIGNAL, TIMEFRAME = TIMEFRAME,\
+            PERIOD_ALPHA = PERIOD_ALPHA, PERIOD_BETA = PERIOD_BETA, PERIODATR = PERIODATR)
 
     
 
