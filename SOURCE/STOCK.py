@@ -4,32 +4,6 @@ Created on Wed Mar 13 18:24:08 2019
 
 @author: kennedy
 """
-#################################################################################
-# MIT License
-#
-# Copyright (c) 2019 FibAi
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-##################################################################################
-
-
-
 #import class numpy
 import numpy as np
 #import pandas class
@@ -374,6 +348,26 @@ class stock(object):
     
     return self.df.ewm(self.n).std()
   
+  def wma(self, df, n):
+      '''
+      :params: df: price
+      :params: n: period
+      :Return: Weighted Moving Average
+      '''
+      weight = np.arange(1, n+1)
+      return df.rolling(n, center = False).apply(lambda x: np.sum(weight * x)\
+                        / np.sum(weight))
+    
+  def HMA(self, df, n):
+      '''
+      :params: df: price
+      :params: n: period
+      :Return: Hull Moving Average
+      '''
+      wmahalf = 2 * self.wma(df, int(n/2))
+      wmadiff = abs(wmahalf - self.wma(df, n))
+      return self.wma(wmadiff, int(np.sqrt(n)))
+
   def returns(self, df):
     '''
     :Arguments:
@@ -710,8 +704,8 @@ class stock(object):
     dt = df.diff().fillna(0)
     Up = pd.DataFrame(np.where(dt > 0, dt, 0))
     Down = pd.DataFrame(np.where(dt < 0, -dt, 0))
-    RolUp = Up.ewm(span = n).mean()
-    RolDown = Down.ewm(span = n).mean()
+    RolUp = Up.ewm(n).mean()
+    RolDown = Down.ewm(n).mean()
     RSI = RolUp/RolDown
     RSI = 100.0 - (100.0/(1.0 + RSI))
     return RSI
@@ -813,7 +807,7 @@ class stock(object):
     #return supertrend only    
     return df['SuperTrend']
 
-  def Keltner_channel(self, df, period, atr_period, multiplier):
+  def Keltner_channel(self, df, period, multiplier):
     '''
     :Arguments:
       :period:
@@ -822,11 +816,12 @@ class stock(object):
     :Return type:
       :keltner channel
     '''
-    ATR = self.ATR(df, atr_period)
+    df = df.copy(deep = True)
+    ATR = self.ATR(df, period)
     Mid_band = self.ema(df.Close, period)
     Lower_band = Mid_band + multiplier * ATR.values
     Upper_band = Mid_band - multiplier * ATR.values
-    return pd.DataFrame({'ul': Upper_band, 'ml': Mid_band, 'll': Lower_band})
+    return pd.DataFrame({'ub': Upper_band, 'ml': Mid_band, 'lb': Lower_band})
       
       
     
