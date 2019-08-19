@@ -135,8 +135,51 @@ class signalStrategy(object):
       print('RSI Signal Generation completed')
       print('*'*40)
       return df
-      
-    #RSI Signal
+    
+    ##CCI signal
+    def CCI_signal(self, STK_data, period, lw_bound, up_bound):
+      '''
+      :Arguments:
+        df: stock data
+      :Return type:
+        signal
+      :Complexity: Time: O(N*log N) | Space: O(1)
+      '''
+      stock_data = stock(STK_data)
+      df = stock_data.OHLC()
+      #get signal
+      #1--> indicates buy position
+      #0 --> indicates sell posotion
+      cci = np.array(stock_data.CCI(period, useEMA = True))
+      cci = np.nan_to_num(cci)
+      signal = np.zeros_like(cci)
+      for ii in range(len(signal)):
+          if cci[ii] >= up_bound:
+              signal[ii:] = 1
+          elif cci[ii] <= lw_bound:
+              signal[ii:] = 0
+      df['CCI'] = cci
+      df['signal'] = signal
+      print('*'*40)
+      print('RSI Signal Generation completed')
+      print('*'*40)
+      return df
+  
+    #--Hull MA Signals
+    def HullMASignals(self, STK_data, hmaperiod, emaperiod):
+        stock_data = stock(STK_data)
+        df = stock_data.OHLC()
+        hull = np.array(stock_data.HMA(hmaperiod))
+        hull = np.nan_to_num(hull)
+        emas = stock_data.ema(df, emaperiod)
+        signal = np.where(((hull > emas.Open) & (hull > emas.High) & (hull > emas.Low) & (hull > emas.Close)) , 1, 0)
+        df['signal'] = signal
+        print('*'*40)
+        print('HMA signal Generation completed')
+        print('*'*40)
+        return df
+    
+    #MACD Signal
     def macd_crossOver(self, STK_data, fast, slow, signal):
       '''
       :Argument:
@@ -278,7 +321,8 @@ class Signal(object):
     def __init__(self):
         return
     
-    def tradingSignal(self, STK_data, RSI = None, MACD = None, Bollinger_Band = None, SuperTrend = None, MA = None, Keltner = None, strategy = None):
+    def tradingSignal(self, STK_data, RSI = None, MACD = None, Bollinger_Band = None, SuperTrend = None, \
+                      MA = None, Keltner = None, HMA = None, CCI = None, strategy = None):
         '''
         STRATEGIES
         ========================
@@ -309,6 +353,19 @@ class Signal(object):
         [555] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs SUPER TREND
         [666] MOVING AVERAGE vs BOLLINGER BAND vs MACD vs RSI vs SUPER TREND
         ------------------------------------------------------------------------
+        [777] MACD vs RSI
+        [888] MACD vs SUPERTREND
+        [999] RSI vs SUPERTREND vs BOLLINGER BAND
+        [1111] RSI vs KELTNER CHANNEL
+        [2222] MACD vs KELTNER CHANNEL
+        [3333] SUPERTREND vs KELTNER CHANNEL
+        [4444] RSI vs SUPERTREND vs KELTNER CHANNEL
+        [5555] CCI vs KELTNER CHANNEL
+        [6666] HULL MA
+        [7777] HULL MA vs RSI
+        [8888] HULL MA vs CCI
+        [9999] HULL MA vs KELTNER CHANNEL
+        -------------------------------------------------------------------------
         :Arguments:
             :MACD:
                 dataframe containing MACD signal
@@ -693,6 +750,7 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
             return OHLC
+        #-- MACD vs RSI
         elif strategy == '777':
             MACD_signal = MACD.signal.values
             RSI_signal = RSI.signal.values
@@ -708,6 +766,7 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired, macdRequired], axis = 1)
             return OHLC
+        #--MACD vs SUPERTREND
         elif strategy == '888':
             MACD_signal = MACD.signal.values
             SuperTrend_Signal = SuperTrend.signal.values
@@ -722,6 +781,7 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
+        #--BBand vs RSI vs SUPERTREND
         elif strategy == '999':
             BB_signal = Bollinger_Band.signal.values
             RSI_signal = RSI.signal.values
@@ -739,6 +799,7 @@ class Signal(object):
             rsiRequired = RSI.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
+        #--Keltner Channel vs RSI
         elif strategy == '1111':
             KT_signal = Keltner.signal.values
             RSI_signal = RSI.signal.values
@@ -753,6 +814,7 @@ class Signal(object):
             rsiRequired = RSI.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
             return OHLC
+        #--Keltner Channel vs MACD
         elif strategy == '2222':
             KT_signal = Keltner.signal.values
             MACD_signal = MACD.signal.values
@@ -767,6 +829,7 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
+        #--Keltner Channel vs SUPERTREND
         elif strategy == '3333':
             KT_signal = Keltner.signal.values
             SuperTrend_Signal = SuperTrend.signal.values
@@ -779,6 +842,7 @@ class Signal(object):
                 else:
                     OHLC.Position[ii] = 'HOLD'
             return OHLC
+        #--Keltner Channel vs SUPERTREND vs RSI
         elif strategy == '4444':
             KT_signal = Keltner.signal.values
             SuperTrend_Signal = SuperTrend.signal.values
@@ -793,6 +857,70 @@ class Signal(object):
                     OHLC.Position[ii] = 'HOLD'
             rsiRequired = RSI.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
+        #--------------------------------------
+        #--Keltner Channel vs CCI
+        elif strategy == '5555':
+            KT_signal = Keltner.signal.values
+            CCI_signal = CCI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(KT_signal.shape[0]):
+                if KT_signal[ii] == 1 and CCI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif KT_signal[ii] == 0 and CCI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            cciRequired = CCI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, cciRequired], axis = 1)
+            return OHLC
+        #--HMA vs MA
+        elif strategy == '6666':
+            HMAsignal = HMA.signal.values
+            HMA['Position'] = np.where(HMAsignal == 1, 'BUY', 'SELL')
+            return HMA
+        #--HMA vs MA vs RSI
+        elif strategy == '7777':
+            HMAsignal = HMA.signal.values
+            RSI_signal = RSI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(HMAsignal.shape[0]):
+                if HMAsignal[ii] == 1 and RSI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif HMAsignal[ii] == 0 and RSI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            rsiRequired = RSI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, rsiRequired], axis = 1)
+            return OHLC
+        #--HMA vs MA vs CCI
+        elif strategy == '8888':
+            HMAsignal = HMA.signal.values
+            CCI_signal = CCI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(HMAsignal.shape[0]):
+                if HMAsignal[ii] == 1 and CCI_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif HMAsignal[ii] == 0 and CCI_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            cciRequired = CCI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, cciRequired], axis = 1)
+            return OHLC
+        #--HMA vs MA vs Keltner Channel
+        elif strategy == '9999':
+            HMAsignal = HMA.signal.values
+            KT_signal = Keltner.signal.values
+            OHLC['Position'] = ''
+            for ii in range(HMAsignal.shape[0]):
+                if HMAsignal[ii] == 1 and KT_signal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif HMAsignal[ii] == 0 and KT_signal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
             return OHLC
     
     def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
@@ -846,7 +974,12 @@ class Signal(object):
             [1111] RSI vs KELTNER CHANNEL
             [2222] MACD vs KELTNER CHANNEL
             [3333] SUPERTREND vs KELTNER CHANNEL
-            [444] RSI vs SUPERTREND vs KELTNER CHANNEL
+            [4444] RSI vs SUPERTREND vs KELTNER CHANNEL
+            [5555] CCI vs KELTNER CHANNEL
+            [6666] HULL MA
+            [7777] HULL MA vs RSI
+            [8888] HULL MA vs CCI
+            [9999] HULL MA vs KELTNER CHANNEL
         :return type:
             signal saved to prediction table
         '''
@@ -1001,6 +1134,28 @@ class Signal(object):
             df_STrend = signalStrategy().SuperTrend_signal(df, MULTIPLIER, PERIOD)
             df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
             signal = Signal().tradingSignal(df, SuperTrend=df_STrend, Keltner= df_KT, RSI=df_RSI, strategy = strategy)
+        elif strategy == '5555':
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
+            signal = Signal().tradingSignal(df, Keltner= df_KT, CCI = df_CCI, strategy = strategy)
+        elif strategy == '6666':
+            HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
+            signal = Signal().tradingSignal(df, HMA = HMA_MA, strategy = strategy)
+        #--HULL MA vs RSI
+        elif strategy == '7777':
+            HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
+            df_RSI = signalStrategy().RSI_signal(df, PERIOD, lw_bound = LOWER_BOUND, up_bound = UPPER_BOUND)
+            signal = Signal().tradingSignal(df, HMA = HMA_MA, RSI=df_RSI, strategy = strategy)
+        #--HULL MA vs CCI
+        elif strategy == '8888':
+            HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
+            df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
+            signal = Signal().tradingSignal(df, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
+        #--HULL MA vs CCI
+        elif strategy == '9999':
+            HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
+            df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
+            signal = Signal().tradingSignal(df, HMA = HMA_MA, Keltner= df_KT, strategy = strategy)
         else:
             pass
         print('*'*40)
@@ -1009,7 +1164,7 @@ class Signal(object):
         print('Saving file')
         #---strategy selection-----
         loc.set_path(path+ '/PREDICTED/STRATEGY_{}/{}'.format(str(strategy), TIMEFRAME))
-        signal.to_csv('{}'.format(STOCK)+ '.csv', mode='w')
+        signal.to_csv('{}'.format(STOCK)+ '.csv', mode='w+')
 
 
 
@@ -1097,7 +1252,8 @@ class Run(Runcollector):
         print(f'End time {time.time() - begin}')
         print(datetime.today())
         print('program running in background')
-
+        
+        
 #%% main script 
 if __name__ == '__main__':
     import multiprocessing
