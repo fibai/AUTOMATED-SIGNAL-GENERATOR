@@ -1151,7 +1151,7 @@ class Signal(object):
             HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
             df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
             signal = Signal().tradingSignal(df, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
-        #--HULL MA vs CCI
+        #--HULL MA vs Keltner Channel
         elif strategy == '9999':
             HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
             df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
