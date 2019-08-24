@@ -382,7 +382,7 @@ class stock(object):
       '''
       weight = np.arange(1, n+1)
       return df.rolling(n, center = False).apply(lambda x: np.sum(weight * x)\
-                        / np.sum(weight))
+                        / np.sum(weight), raw = True)
     
   def HMA(self, df, n):
       '''
@@ -438,16 +438,24 @@ class stock(object):
     '''
     return pd.Series(self.Close.diff(n), name = 'Momentum')
 
-  def CCI(self, n, useEMA = False):
+  def CCI(self, n, useEMA = True):
     '''
     :param: peiod
     '''
     pp = (self.High + self.Low + self.Close)/3.0
     if not useEMA:
-        cci = pd.Series(pp - self.sma(pp, n))/self.std(pp, n)
+        cci = pd.Series(pp - self.sma(pp, n))/self.std(pp, n) *100
     else:
-        cci = pd.Series(pp - self.ema(pp, n))/self.emaStd(pp, n)
+        cci = pd.Series(pp - self.ema(pp, n))/self.emaStd(pp, n) *100
     return pd.Series(cci, name = 'CCI')
+
+  def HullCCI(self, n):
+    '''
+    :param: peiod
+    '''
+    pp = (self.High + self.Low + self.Close)/3.0
+    hcci = pd.Series(pp - self.HMA(pp, n))/self.emaStd(pp, n) *100
+    return pd.Series(hcci, name = 'HullCCI')
 
   def massIndex(self, n):
     '''
@@ -656,6 +664,33 @@ class stock(object):
     macd_histo_ = macd - macd_signal
     return pd.DataFrame({'MACD': macd, 'MACD_HIST': macd_histo_,
                          'MACD_SIGNAL': macd_signal})
+    
+  def HullMACD(self, n_fast, n_slow, signal):
+    '''
+    :Arguments:
+      :n_fast: <integer> representing fast exponential
+              moving average
+              
+      :n_slow: <integer> representing slow exponential
+              moving average
+              
+      :signal: Signal line
+      
+    :Return:
+      MACD: fast, slow and signal.
+    '''
+    
+    self.n_fast = n_fast
+    self.n_slow = n_slow
+    self.signal = signal
+    #defin MACD
+    macd = self.HMA(self.Close, n_fast) - self.HMA(self.Close, n_slow)
+    #MACD signal
+    macd_signal = self.HMA(macd, self.signal)
+    #MACD histo
+    macd_histo_ = macd -  0.0015*macd_signal
+    return pd.DataFrame({'MACD': macd, 'MACD_HIST': macd_histo_,
+                         'MACD_SIGNAL': macd_signal})
   
   def WilderRSI(self, df, n):
     """
@@ -848,14 +883,8 @@ class stock(object):
     Lower_band = Mid_band + multiplier * ATR.values
     Upper_band = Mid_band - multiplier * ATR.values
     return pd.DataFrame({'ub': Upper_band, 'ml': Mid_band, 'lb': Lower_band})
-      
-      
-    
-
-    
-
   
-  
+    
   
   
   
