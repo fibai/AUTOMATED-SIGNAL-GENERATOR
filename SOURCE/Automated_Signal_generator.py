@@ -151,7 +151,7 @@ class signalStrategy(object):
       #get signal
       #1--> indicates buy position
       #0 --> indicates sell posotion
-      cci = np.array(stock_data.CCI(period, useEMA = True))
+      cci = np.array(stock_data.CCI(period))
       cci = np.nan_to_num(cci)
       signal = np.zeros_like(cci)
       for ii in range(len(signal)):
@@ -170,13 +170,32 @@ class signalStrategy(object):
     def HullMASignals(self, STK_data, hmaperiod, emaperiod):
         stock_data = stock(STK_data)
         df = stock_data.OHLC()
-        hull = np.array(stock_data.HMA(hmaperiod))
+        hull = np.array(stock_data.HMA(stock_data.c, hmaperiod))
         hull = np.nan_to_num(hull)
         emas = stock_data.ema(df, emaperiod)
         signal = np.where(((hull > emas.Open) & (hull > emas.High) & (hull > emas.Low) & (hull > emas.Close)) , 1, 0)
         df['signal'] = signal
         print('*'*40)
         print('HMA signal Generation completed')
+        print('*'*40)
+        return df
+    
+    #--HullCCI Signals
+    def HullCCISignals(self, STK_data, period):
+        stock_data = stock(STK_data)
+        df = stock_data.OHLC()
+        hcci = np.array(stock_data.HullCCI(period))
+        hcci = np.nan_to_num(hcci)
+        signal = np.zeros(df.shape[0])
+        for ii in range(df.shape[0]):
+            if hcci[ii] >= 100:
+                signal[ii:] = 1
+            elif hcci[ii] <= -100:
+                signal[ii:] = 0
+        df['HCCI'] = hcci
+        df['signal'] = signal
+        print('*'*40)
+        print('HullCCI signal Generation completed')
         print('*'*40)
         return df
     
@@ -323,7 +342,7 @@ class Signal(object):
         return
     
     def tradingSignal(self, STK_data, RSI = None, MACD = None, Bollinger_Band = None, SuperTrend = None, \
-                      MA = None, Keltner = None, HMA = None, CCI = None, strategy = None):
+                      MA = None, Keltner = None, HMA = None, CCI = None, HCCI = None, strategy = None):
         '''
         STRATEGIES
         ========================
@@ -368,6 +387,7 @@ class Signal(object):
         [9999] HULL MA vs KELTNER CHANNEL
         [11111] HULL MA vs KELTNER CHANNEL vs CCI
         [22222] HULL MA vs KELTNER CHANNEL vs MACD
+        [33333] Hull-CCI
         -------------------------------------------------------------------------
         :Arguments:
             :MACD:
@@ -961,6 +981,37 @@ class Signal(object):
             macdRequired = MACD.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, macdRequired], axis = 1)
             return OHLC
+        #--Hull CCI
+        elif strategy == '33333':
+            HCCIsignal = HCCI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(HCCIsignal.shape[0]):
+                if HCCIsignal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                else:
+                    OHLC.Position[ii] = 'SELL'
+            hcci = HCCI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, hcci], axis = 1)
+            return OHLC
+        #--HMA vs CCI vs HCCI
+        elif strategy == '44444':
+            HMAsignal = HMA.signal.values
+            CCI_signal = CCI.signal.values
+            HCCIsignal = HCCI.signal.values
+            OHLC['Position'] = ''
+            for ii in range(HCCIsignal.shape[0]):
+                if HCCIsignal[ii] == 1 and CCI_signal[ii] == 1 and\
+                    HMAsignal[ii] == 1:
+                    OHLC.Position[ii] = 'BUY'
+                elif HCCIsignal[ii] == 0 and CCI_signal[ii] == 0 and\
+                    HMAsignal[ii] == 0:
+                    OHLC.Position[ii] = 'SELL'
+                else:
+                    OHLC.Position[ii] = 'HOLD'
+            cciRequired = CCI.drop([x for x in columns], axis = 1)
+            hcci = HCCI.drop([x for x in columns], axis = 1)
+            OHLC = pd.concat([OHLC, hcci, cciRequired], axis = 1)
+            return OHLC
     
     def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
              UPPER_BOUND = None, MIDLINE = None, FAST = None, SLOW = None, SIGNAL = None, TIMEFRAME = None,
@@ -1021,6 +1072,8 @@ class Signal(object):
             [9999] HULL MA vs KELTNER CHANNEL
             [11111] HULL MA vs KELTNER CHANNEL vs CCI
             [22222] HULL MA vs KELTNER CHANNEL vs MACD
+            [33333] Hull CCI
+            [44444] HMA vs CCI vs HCCI
             -------------------------------------------
         :return type:
             signal saved to prediction table
@@ -1221,6 +1274,16 @@ class Signal(object):
             df_KT = signalStrategy().keltner_signal(df, periodATR, multiplier= MULTIPLIER)
             df_MACD = signalStrategy().macd_crossOver(df, FAST, SLOW, SIGNAL)
             signal = Signal().tradingSignal(df, HMA = HMA_MA, Keltner= df_KT, MACD = df_MACD, strategy = strategy)
+        #--HULL MA vs CCI
+        elif strategy == '33333':
+            df_HCCI = signalStrategy().HullCCISignals(df, periodATR)
+            signal = Signal().tradingSignal(df, HCCI=df_HCCI, strategy = strategy)
+        #--HULL vs CCI vs HCCI
+        elif strategy == '44444':
+            HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
+            df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
+            df_HCCI = signalStrategy().HullCCISignals(df, periodATR)
+            signal = Signal().tradingSignal(df, HCCI = df_HCCI, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
         else:
             pass
         print('*'*40)
@@ -1230,8 +1293,6 @@ class Signal(object):
         #---strategy selection-----
         loc.set_path(path+ '/PREDICTED/STRATEGY_{}/{}'.format(str(strategy), TIMEFRAME))
         signal.to_csv('{}'.format(STOCK)+ '.csv', mode='w+')
-
-
 
 class Run(Runcollector):
     def __init__(self, path, strategy, STOCKLIST, DEVIATION, MULTIPLIER, PERIOD, LOWER_BOUND,\
@@ -1316,7 +1377,8 @@ class Run(Runcollector):
             self.runSignal(self.stkname)
         print(f'End time {time.time() - begin}')
         print(datetime.today())
-        print('program running in background')        
+        print('program running in background')
+        
         
 #%% main script 
 if __name__ == '__main__':
