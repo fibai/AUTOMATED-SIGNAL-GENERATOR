@@ -1,5 +1,5 @@
 # AUTOMATED-SIGNAL-GENERATOR
-AUTOMATED SIGNAL GENERATOR FOR STOCKS/FX-PAIRS. A research oriented project to design a benchmark deep learning algorithm for Financial Market prediction and forecast.
+AUTOMATED SIGNAL GENERATOR FOR STOCKS/FX-PAIRS. A research oriented project, to design a benchmark deep learning algorithm for Financial Market prediction and forecast.
 
 ```bash
 +-- DATASSET
