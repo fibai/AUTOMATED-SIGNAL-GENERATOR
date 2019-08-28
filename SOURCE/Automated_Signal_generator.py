@@ -29,9 +29,6 @@ Created on Wed Mar 13 18:04:29 2019
 # SOFTWARE.
 ##################################################################################
 
-
-
-
 import os
 from STOCK import stock, loc
 import pandas as pd
