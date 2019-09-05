@@ -5,8 +5,7 @@ Created on Wed Mar 13 18:04:29 2019
 @author: kennedy
 """
 
-<<<<<<< HEAD
-=======
+
 #################################################################################
 # MIT License
 #
@@ -31,7 +30,7 @@ Created on Wed Mar 13 18:04:29 2019
 # SOFTWARE.
 ##################################################################################
 
->>>>>>> master
+
 import os
 from STOCK import stock, loc
 import pandas as pd
@@ -1166,10 +1165,8 @@ class Signal(object):
             [22222] HULL MA vs KELTNER CHANNEL vs MACD
             [33333] Hull CCI
             [44444] HMA vs CCI vs HCCI
-<<<<<<< HEAD
             [55555] HMA-CCI vs HCCI
-=======
->>>>>>> master
+
             -------------------------------------------
         :return type:
             signal saved to prediction table
@@ -1380,15 +1377,13 @@ class Signal(object):
             df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
             df_HCCI = signalStrategy().HullCCISignals(df, periodATR)
             signal = Signal().tradingSignal(df, HCCI = df_HCCI, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
-<<<<<<< HEAD
         #--HULL vs CCI vs HCCI
         elif strategy == '55555':
             HMA_MA = signalStrategy().HullMASignals(df, periodATR, LOWER_BOUND)
             df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
             df_HCCI = signalStrategy().HullCCISignals(df, periodATR)
             signal = Signal().tradingSignal(df, HCCI = df_HCCI, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
-=======
->>>>>>> master
+
         else:
             pass
         print('*'*40)
