@@ -5,32 +5,6 @@ Created on Wed Mar 13 18:04:29 2019
 @author: kennedy
 """
 
-
-#################################################################################
-# MIT License
-#
-# Copyright (c) 2019 FibAi
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-##################################################################################
-
-
 import os
 from STOCK import stock, loc
 import pandas as pd
@@ -1036,73 +1010,6 @@ class Signal(object):
             hcci = HCCI.drop([x for x in columns], axis = 1)
             OHLC = pd.concat([OHLC, hcci, cciRequired], axis = 1)
             return OHLC
-        #--HMA vs MA vs Keltner Channel vs CCI
-        elif strategy == '11111':
-            HMAsignal = HMA.signal.values
-            KT_signal = Keltner.signal.values
-            CCI_signal = CCI.signal.values
-            OHLC['Position'] = ''
-            for ii in range(HMAsignal.shape[0]):
-                if HMAsignal[ii] == 1 and KT_signal[ii] == 1 and\
-                    CCI_signal[ii] == 1:
-                    OHLC.Position[ii] = 'BUY'
-                elif HMAsignal[ii] == 0 and KT_signal[ii] == 0 and\
-                    CCI_signal[ii] == 0:
-                    OHLC.Position[ii] = 'SELL'
-                else:
-                    OHLC.Position[ii] = 'HOLD'
-            cciRequired = CCI.drop([x for x in columns], axis = 1)
-            OHLC = pd.concat([OHLC, cciRequired], axis = 1)
-            return OHLC
-        #--HMA vs MA vs Keltner Channel vs MACD
-        elif strategy == '22222':
-            HMAsignal = HMA.signal.values
-            KT_signal = Keltner.signal.values
-            MACD_signal = MACD.signal.values
-            OHLC['Position'] = ''
-            for ii in range(HMAsignal.shape[0]):
-                if HMAsignal[ii] == 1 and KT_signal[ii] == 1 and\
-                    MACD_signal[ii] == 1:
-                    OHLC.Position[ii] = 'BUY'
-                elif HMAsignal[ii] == 0 and KT_signal[ii] == 0 and\
-                    MACD_signal[ii] == 0:
-                    OHLC.Position[ii] = 'SELL'
-                else:
-                    OHLC.Position[ii] = 'HOLD'
-            macdRequired = MACD.drop([x for x in columns], axis = 1)
-            OHLC = pd.concat([OHLC, macdRequired], axis = 1)
-            return OHLC
-        #--Hull CCI
-        elif strategy == '33333':
-            HCCIsignal = HCCI.signal.values
-            OHLC['Position'] = ''
-            for ii in range(HCCIsignal.shape[0]):
-                if HCCIsignal[ii] == 1:
-                    OHLC.Position[ii] = 'BUY'
-                else:
-                    OHLC.Position[ii] = 'SELL'
-            hcci = HCCI.drop([x for x in columns], axis = 1)
-            OHLC = pd.concat([OHLC, hcci], axis = 1)
-            return OHLC
-        #--HMA vs CCI vs HCCI
-        elif strategy == '44444':
-            HMAsignal = HMA.signal.values
-            CCI_signal = CCI.signal.values
-            HCCIsignal = HCCI.signal.values
-            OHLC['Position'] = ''
-            for ii in range(HCCIsignal.shape[0]):
-                if HCCIsignal[ii] == 1 and CCI_signal[ii] == 1 and\
-                    HMAsignal[ii] == 1:
-                    OHLC.Position[ii] = 'BUY'
-                elif HCCIsignal[ii] == 0 and CCI_signal[ii] == 0 and\
-                    HMAsignal[ii] == 0:
-                    OHLC.Position[ii] = 'SELL'
-                else:
-                    OHLC.Position[ii] = 'HOLD'
-            cciRequired = CCI.drop([x for x in columns], axis = 1)
-            hcci = HCCI.drop([x for x in columns], axis = 1)
-            OHLC = pd.concat([OHLC, hcci, cciRequired], axis = 1)
-            return OHLC
     
     def main(self, path, strategy, STOCK, DEVIATION = None, MULTIPLIER = None, PERIOD = None, LOWER_BOUND = None,
              UPPER_BOUND = None, MIDLINE = None, FAST = None, SLOW = None, SIGNAL = None, TIMEFRAME = None,
@@ -1166,7 +1073,6 @@ class Signal(object):
             [33333] Hull CCI
             [44444] HMA vs CCI vs HCCI
             [55555] HMA-CCI vs HCCI
-
             -------------------------------------------
         :return type:
             signal saved to prediction table
@@ -1383,7 +1289,6 @@ class Signal(object):
             df_CCI = signalStrategy().CCI_signal(df, PERIOD, -100, 100)
             df_HCCI = signalStrategy().HullCCISignals(df, periodATR)
             signal = Signal().tradingSignal(df, HCCI = df_HCCI, HMA = HMA_MA, CCI = df_CCI, strategy = strategy)
-
         else:
             pass
         print('*'*40)
@@ -1393,6 +1298,8 @@ class Signal(object):
         #---strategy selection-----
         loc.set_path(path+ '/PREDICTED/STRATEGY_{}/{}'.format(str(strategy), TIMEFRAME))
         signal.to_csv('{}'.format(STOCK)+ '.csv', mode='w+')
+
+
 
 class Run(Runcollector):
     def __init__(self, path, strategy, STOCKLIST, DEVIATION, MULTIPLIER, PERIOD, LOWER_BOUND,\
