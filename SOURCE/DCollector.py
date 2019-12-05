@@ -5,33 +5,6 @@ Created on Wed Feb  27 16:30:21 2019
 
 @author: kennedy
 """
-
-#################################################################################
-# MIT License
-#
-# Copyright (c) 2019 FibAi
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-##################################################################################
-
-
-
 import os
 import datetime
 
@@ -114,10 +87,10 @@ class stockDownload:
                                l = candle['mid']['l'],
                                c = candle['mid']['c'],
                                v = candle['volume'])
+                        frame.write(rec+'\n')
                 except Exception as e:
                     raise(e)
-                else:
-                    frame.write(rec+'\n')
+                
                 
                 
         #try except to both create folder and enter ticker
@@ -126,7 +99,7 @@ class stockDownload:
             if not os.path.exists(self.path['mainPath'] + f'/DATASETS/{self.instrument}'):
                 os.makedirs(self.path['mainPath'] + f'/DATASETS/{self.instrument}')
             #import the required timeframe
-            with open(self.path['mainPath'] + '/DATASETS/{}/{}_{}.csv'.format(self.instrument, self.instrument, self.timeframe), 'w') as OUTPUT:
+            with open(self.path['mainPath'] + '/DATASETS/{}/{}_{}.csv'.format(self.instrument, self.instrument, self.timeframe), 'w+') as OUTPUT:
                 params = {'from': self.start,
                           'to': self.end,
                           'granularity': self.timeframe,
@@ -156,10 +129,10 @@ class Runcollector:
         self.runnewMain()
 
     def loadData(self):
-        import multiprocessing
+        from threading import Thread
         threads = []
         for instr in self.path['instruments'].split(','):
-            threads.append(multiprocessing.Process(target = stockDownload, args = (self.path, instr, self.start,
+            threads.append(Thread(target = stockDownload, args = (self.path, instr, self.start,
                                                                                    self.end, self.client, self.timeframe)))
         for trd in threads:
             trd.daemon = True
