@@ -29,7 +29,7 @@ from sklearn.ensemble import (AdaBoostRegressor, #Adaboost regressor
                               BaggingRegressor, #Bagging regressor
                               ExtraTreesRegressor) #Extratrees regressor
 
-from DCollector_Updated import Path, Runcollector
+from DCollector import Path, Runcollector
 ## SIGNAL GENERATOR --> MACD, BOLLINGER BAND, RSI, etc
   
 #Moving average signals
